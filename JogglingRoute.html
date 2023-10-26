@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Random Jogging Routes</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        #map { height: 400px; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <button onclick="generateRandomRoute()">Generate Random Route</button>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        var map;
+        var randomRoute = null;
+
+        function initMap(position) {
+            map = L.map('map').setView([position.coords.latitude, position.coords.longitude], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19
+            }).addTo(map);
+        }
+
+        navigator.geolocation.getCurrentPosition(initMap);
+
+        function generateRandomRoute() {
+            if (!map) {
+                alert("Wait for the map to initialize.");
+                return;
+            }
+
+            if (randomRoute) {
+                randomRoute.remove();
+            }
+
+            var center = map.getCenter();
+            var latOff1 = (Math.random() - 0.5) * 0.02;
+            var lngOff1 = (Math.random() - 0.5) * 0.02;
+            var latOff2 = (Math.random() - 0.5) * 0.02;
+            var lngOff2 = (Math.random() - 0.5) * 0.02;
+
+            var point1 = [center.lat + latOff1, center.lng + lngOff1];
+            var point2 = [center.lat + latOff2, center.lng + lngOff2];
+
+            function decode(encoded) {
+                // Перекодування з компактного кодування полілінії
+                let len = encoded.length;
+                let index = 0;
+                let array = [];
+                let lat = 0;
+                let lng = 0;
+
+                while (index < len) {
+                    let b;
+                    let shift = 0;
+                    let result = 0;
+                    do {
+                        b = encoded.charCodeAt(index++) - 63;
+                        result |= (b & 0x1f) << shift;
+                        shift += 5;
+                    } while (b >= 0x20);
+
+                    let dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+                    lat += dlat;
+
+                    shift = 0;
+                    result = 0;
+                    do {
+                        b = encoded.charCodeAt(index++) - 63;
+                        result |= (b & 0x1f) << shift;
+                        shift += 5;
+                    } while (b >= 0x20);
+
+                    let dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+                    lng += dlng;
+
+                    array.push([lat * 1e-5, lng * 1e-5]);
+                }
+
+                return array;
+            }
+
+            fetch(`https://router.project-osrm.org/route/v1/foot/${center.lng},${center.lat};${point1[1]},${point1[0]};${point2[1]},${point2[0]};${center.lng},${center.lat}?overview=full`)
+            .then(response => response.json())
+            .then(data => {
+                if (data && data.routes && data.routes.length > 0) {
+                    let coordinates = decode(data.routes[0].geometry);
+                    randomRoute = L.polyline(coordinates, {color: 'red'}).addTo(map);
+                } else {
+                    console.error("Unexpected data structure:", data);
+                }
+            })
+            .catch(error => {
+                console.error("Error generating route:", error);
+            });
+        }
+    </script>
+</body>
+</html>
